@@ -6,15 +6,18 @@ import { ScorePicker } from "@/components/score-picker"
 import { SubmitButton } from "@/components/submit-button"
 
 export function RatingForm({
+  movieId,
   experience,
   quality,
 }: {
+  movieId: number
   experience?: number
   quality?: number
 }) {
   const [state, action] = useActionState(rateAction, null as ActionState)
   return (
     <form action={action} className="space-y-6">
+      <input type="hidden" name="movieId" value={movieId} />
       <ScorePicker
         name="experience"
         label="How much did you enjoy watching it?"
@@ -38,7 +41,7 @@ export function RatingForm({
       ) : null}
       {state?.ok ? (
         <p role="status" className="text-sm text-muted-foreground">
-          Saved. You can change either score until the week locks.
+          Saved. You can change either score whenever you want.
         </p>
       ) : null}
       <SubmitButton pendingLabel="Saving scores…">

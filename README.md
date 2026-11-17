@@ -1,6 +1,6 @@
 # Reel Club
 
-A private web app for a group of friends who run a weekly movie club. Each round, one member suggests a movie. Everyone else scores it twice: how much they enjoyed watching it, and how good the movie actually is. Locked scores are replayed through [`movie_elo`](vendor/MOVIE_ELO_README.md), an Elo-style ranking of the members who pick.
+A private web app for a group of friends who run a movie club. Anyone can suggest a movie whenever they want. Everyone else scores it twice: how much they enjoyed watching it, and how good the movie actually is. Scored movies are replayed through [`movie_elo`](vendor/MOVIE_ELO_README.md), an Elo-style ranking of the members who pick.
 
 ## Ranking engine
 
@@ -11,7 +11,7 @@ A private web app for a group of friends who run a weekly movie club. Each round
 - Upstream tests: `vendor/upstream_tests` (run by `npm test`)
 - Adapter: `scripts/elo_bridge.py`
 
-The app stores the member list and the raw rating log in SQLite. Standings are not stored. On each page that needs them, the Node server sends that log to the adapter, which calls `replay()` (and `preview_week()` for an open week). Reports on the film page come from `format_week_report`. Nothing in this repository reimplements the match math.
+The app stores the member list and the raw rating log in SQLite. Standings are not stored. On each page that needs them, the Node server sends scored movies to the adapter, which calls `replay()`. Reports on the film page come from `format_week_report`. Nothing in this repository reimplements the match math. The library still calls each movie a "week"; the app no longer does.
 
 The adapter reads JSON on stdin and writes JSON on stdout:
 
@@ -31,18 +31,18 @@ The adapter reads JSON on stdin and writes JSON on stdout:
 }
 ```
 
-`members` are the immutable names on the board, in join order. `weeks` are locked rounds only, oldest first. `preview` is the open round, scored but not applied. The response includes `standings`, `history` (each `WeekResult` plus the library's text report), `total_elo`, and `params`.
+`members` are the immutable names on the board, in join order. `weeks` are scored movies only. When a movie includes `ranked_at` (the time it first received a score, or the lock time of a movie migrated from the old weekly log), the adapter replays in that order rather than by `week_id`. Without `ranked_at`, the array order is the replay order. `preview` is still accepted by the adapter and is not used by the app. The response includes `standings`, `history` (each `WeekResult` plus the library's text report), `total_elo`, and `params`.
 
 ## Rules the app enforces
 
-- One open suggestion at a time. The person who suggests it is the suggester in `movie_elo`.
+- Anyone can suggest a movie at any time. Several suggestions can be waiting at once. The person who suggests it is the suggester in `movie_elo`.
 - Scores are 1–10 in half-point steps. The library accepts any real number in `[1, 10]`; the app is stricter so the buttons match the scale.
 - The suggester cannot score their own movie. `movie_elo` raises `ValidationError` if they do.
-- A member may submit one pair of scores per open movie and edit it until the week locks.
-- While a week is open, other people's numbers are hidden. Yours stay visible to you.
-- The suggester, or an admin, locks the week once at least one score is in. Locking is what feeds the log. It does not happen automatically when the roster is full.
-- An admin can reopen only the most recently locked week, and only when nothing else is open. Withdrawing an open pick deletes it and its scores; those scores were never ranked.
-- The first locked movie does not move anyone. It starts defending the next week. 1500 stays the group average.
+- A member has one pair of scores per movie and can edit that pair at any time. Scores are visible once saved.
+- A movie joins the ranking as soon as it has at least one score. Unscored suggestions stay on Unwatched / up next and are not replayed.
+- Replay order is the time of the first score (`ranked_at`), then the movie id. Editing a score does not move the movie in that order. Movies migrated from the old weekly log keep their lock time, so an existing ranking stays in the order it was recorded.
+- The suggester, or an admin, can remove a suggestion that has no scores. A scored movie stays in the log.
+- The first scored movie does not move anyone. It starts defending the next one. 1500 stays the group average.
 - Parameters stay at the library defaults (`k=32`, `d=2`, `w=400`, `alpha=0.5`, scale 1–10). Voter credit, provisional K, and pick expiry stay off.
 
 ## Local setup
@@ -95,7 +95,8 @@ npm test
 ```
 
 - `tests/auth.test.ts` covers invite checks, hashing, login, and sessions.
-- `tests/ratings.test.ts` covers suggestions, both scores, the suggester rule, the lock, and a replay whose total Elo stays `1500 × members`.
+- `tests/ratings.test.ts` covers several suggestions at once, scoring out of suggestion order, edits that do not reshuffle replay, and a replay whose total Elo stays `1500 × members`.
+- `tests/migrate.test.ts` upgrades a weekly SQLite file in place and checks that users, movies, and ratings survive.
 - `tests/ranking.test.ts` and `tests/test_bridge.py` check the adapter against `movie_elo.replay` directly.
 - `vendor/upstream_tests` is the library's own suite, including the README worked example.
 
@@ -143,5 +144,5 @@ Without `PORT`, the container listens on 43123.
 A few parts of the upstream guide describe a richer game than this app plays. They are left unused on purpose, not reimplemented:
 
 - The guide's opening describes three candidate movies and a vote. This club suggests one movie. `voter_share` stays 0, so `candidates` and `votes` are never sent.
-- Membership changes are not part of the week log. The app replays the current member list from the beginning. Someone who joins later sits at 1500 for old weeks and does not judge them, which matches `add_member` for a person with no past ratings. Removing a member is not supported: their name would still be inside old weeks, and replay would raise `UnknownMemberError`.
+- Membership changes are not part of the movie log. The app replays the current member list from the beginning. Someone who joins later sits at 1500 for old movies and does not judge them, which matches `add_member` for a person with no past ratings. Removing a member is not supported: their name would still be inside old movies, and replay would raise `UnknownMemberError`.
 - The upstream repo declares MIT in `pyproject.toml` and does not ship a LICENSE file.

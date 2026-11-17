@@ -106,6 +106,75 @@ class BridgeTests(unittest.TestCase):
         self.assertTrue(preview["ok"])
         self.assertIn("suggester must not rate", preview["preview_error"]["error"])
 
+    def test_input_order_is_kept_when_ranked_at_is_absent(self):
+        output = run_bridge(
+            {
+                "members": ["Ada", "Bea", "Cy"],
+                "weeks": [
+                    {
+                        "week_id": "2026-02-01",
+                        "suggester": "Bea",
+                        "movie": "Later id",
+                        "ratings": {
+                            "Ada": {"experience": 8, "quality": 8},
+                            "Cy": {"experience": 6, "quality": 6},
+                        },
+                    },
+                    {
+                        "week_id": "2026-01-01",
+                        "suggester": "Ada",
+                        "movie": "Earlier id",
+                        "ratings": {
+                            "Bea": {"experience": 9, "quality": 7},
+                            "Cy": {"experience": 5, "quality": 5},
+                        },
+                    },
+                ],
+            }
+        )
+        self.assertTrue(output["ok"])
+        self.assertEqual([week["movie"] for week in output["history"]], ["Later id", "Earlier id"])
+
+    def test_ranked_at_orders_replay_and_is_deterministic(self):
+        def payload(reverse: bool):
+            weeks = [
+                {
+                    "week_id": "2",
+                    "suggester": "Bea",
+                    "movie": "Second suggested",
+                    "ranked_at": "2026-02-01T00:00:00.000Z",
+                    "ratings": {
+                        "Ada": {"experience": 8, "quality": 8},
+                        "Cy": {"experience": 6, "quality": 6},
+                    },
+                },
+                {
+                    "week_id": "10",
+                    "suggester": "Ada",
+                    "movie": "First suggested",
+                    "ranked_at": "2026-03-01T00:00:00.000Z",
+                    "ratings": {
+                        "Bea": {"experience": 9, "quality": 7},
+                        "Cy": {"experience": 5, "quality": 5},
+                    },
+                },
+            ]
+            if reverse:
+                weeks.reverse()
+            return {"members": ["Ada", "Bea", "Cy"], "weeks": weeks}
+
+        first = run_bridge(payload(False))
+        second = run_bridge(payload(True))
+        self.assertTrue(first["ok"])
+        self.assertTrue(second["ok"])
+        self.assertEqual([week["movie"] for week in first["history"]], ["Second suggested", "First suggested"])
+        self.assertEqual([week["week_id"] for week in second["history"]], ["2", "10"])
+        self.assertEqual(
+            [row["elo"] for row in first["standings"]],
+            [row["elo"] for row in second["standings"]],
+        )
+        self.assertAlmostEqual(first["total_elo"], 4500.0)
+
 
 if __name__ == "__main__":
     unittest.main()

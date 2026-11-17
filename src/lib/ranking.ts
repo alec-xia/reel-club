@@ -12,6 +12,9 @@ export type WeekInput = {
   movie: string
   ratings: Record<string, RatingInput>
   date?: string
+  // When set, elo_bridge replays events by this timestamp instead of array
+  // position or week_id. The app sends the movie's first-score time.
+  ranked_at?: string
 }
 
 export type JudgeVerdict = {

@@ -3,13 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { authenticate, createMember, createSession, registerMember } from "@/lib/auth"
-import {
-  closeWeek,
-  reopenLatest,
-  submitRating,
-  suggestMovie,
-  withdrawOpenWeek,
-} from "@/lib/club"
+import { removeSuggestion, submitRating, suggestMovie } from "@/lib/club"
 import { AuthError, ClubError } from "@/lib/errors"
 import { clearSessionCookie, getCurrentUser, setSessionCookie } from "@/lib/session"
 
@@ -31,7 +25,7 @@ export async function loginAction(_prev: ActionState, formData: FormData): Promi
   } catch (error) {
     return { error: message(error) }
   }
-  redirect("/")
+  redirect("/movies")
 }
 
 export async function joinAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -46,7 +40,7 @@ export async function joinAction(_prev: ActionState, formData: FormData): Promis
   } catch (error) {
     return { error: message(error) }
   }
-  redirect("/")
+  redirect("/movies")
 }
 
 export async function logoutAction(): Promise<void> {
@@ -63,14 +57,14 @@ export async function suggestAction(_prev: ActionState, formData: FormData): Pro
     return { error: message(error) }
   }
   refresh()
-  redirect("/")
+  redirect("/movies")
 }
 
 export async function rateAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const user = await getCurrentUser()
   if (!user) return { error: "You need to log in again." }
   try {
-    submitRating(user.id, formData.get("experience"), formData.get("quality"))
+    submitRating(user.id, formData.get("movieId"), formData.get("experience"), formData.get("quality"))
   } catch (error) {
     return { error: message(error) }
   }
@@ -78,47 +72,20 @@ export async function rateAction(_prev: ActionState, formData: FormData): Promis
   return { ok: true }
 }
 
-export async function closeWeekAction(_prev: ActionState, _formData: FormData): Promise<ActionState> {
-  const user = await getCurrentUser()
-  if (!user) return { error: "You need to log in again." }
-  try {
-    closeWeek(user.id)
-  } catch (error) {
-    return { error: message(error) }
-  }
-  refresh()
-  redirect("/leaderboard")
-}
-
-export async function withdrawAction(): Promise<void> {
+export async function removeSuggestionAction(formData: FormData): Promise<void> {
   const user = await getCurrentUser()
   if (!user) redirect("/login")
+  const movieId = String(formData.get("movieId") ?? "")
   try {
-    withdrawOpenWeek(user.id)
+    removeSuggestion(user.id, movieId)
   } catch (error) {
     if (error instanceof ClubError || error instanceof AuthError) {
-      redirect(`/?error=${encodeURIComponent(error.message)}`)
+      redirect(`/movies/${movieId}?error=${encodeURIComponent(error.message)}`)
     }
     throw error
   }
   refresh()
-  redirect("/")
-}
-
-export async function reopenAction(): Promise<void> {
-  const user = await getCurrentUser()
-  if (!user) redirect("/login")
-  let weekId = ""
-  try {
-    weekId = reopenLatest(user.id).weekId
-  } catch (error) {
-    if (error instanceof ClubError || error instanceof AuthError) {
-      redirect(`/admin?error=${encodeURIComponent(error.message)}`)
-    }
-    throw error
-  }
-  refresh()
-  redirect(`/movies/${weekId}`)
+  redirect("/movies")
 }
 
 export async function createMemberAction(_prev: ActionState, formData: FormData): Promise<ActionState> {

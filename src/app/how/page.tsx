@@ -11,20 +11,20 @@ export default function HowPage() {
       </header>
 
       <section className="space-y-3 text-sm leading-relaxed">
-        <h2 className="font-heading text-2xl">The week</h2>
+        <h2 className="font-heading text-2xl">Suggestions and scores</h2>
         <p>
-          One member suggests one movie. That suggestion stays open until the picker, or an admin, locks it. While it
-          is open you can change your scores. After it locks, the numbers are part of the ranking log.
+          Anyone can suggest a movie at any time, and several can be waiting at once. Watch them in whatever order you
+          can. There is no weekly slot and no turn to wait for.
         </p>
         <p>
-          You do not score a movie you picked. The ranking library rejects that on purpose: your own opinion is never
-          used to defend your own film. If you were out the night everyone watched, just don&apos;t score. Absences
-          drop out of the comparisons by themselves.
+          You do not score a movie you suggested. The ranking library rejects that on purpose: your own opinion is
+          never used to defend your own film. If you missed a movie, just don&apos;t score it. Absences drop out of the
+          comparisons by themselves.
         </p>
         <p>
           Scores are 1 to 10, including halves. Enjoyment is the night you had. Quality is whether the movie is
-          actually good. Other people&apos;s numbers stay hidden until the lock, so the last person isn&apos;t grading
-          on a curve they can see.
+          actually good. Each member has one pair of scores per movie, and you can change yours whenever you want. A
+          movie joins the ranking as soon as it has a score. Until then it stays under Unwatched / up next.
         </p>
       </section>
 
@@ -32,14 +32,19 @@ export default function HowPage() {
         <h2 className="font-heading text-2xl">What the Elo is doing</h2>
         <p>
           Reel Club does not average the scores and call that a rating. It hands the raw pairs to{" "}
-          <span className="font-medium">movie_elo</span>, which treats each member&apos;s latest pick as their player.
-          The new movie plays a match against every earlier pick still on the board. The judges are the people who
-          scored both films. A judge who is higher on the board counts for more. Points move from the match loser to
-          the match winner, and the club&apos;s total never drifts, so 1500 stays the middle.
+          <span className="font-medium">movie_elo</span>, which treats each member&apos;s latest scored pick as their
+          player. The new movie plays a match against every earlier pick still on the board. The judges are the people
+          who scored both films. A judge who is higher on the board counts for more. Points move from the match loser
+          to the match winner, and the club&apos;s total never drifts, so 1500 stays the middle.
         </p>
         <p>
-          The first locked movie has nothing to play, so it changes no one. It starts defending the following week.
-          Your rating can move on a week you didn&apos;t pick, because your last movie was challenged.
+          The ranking is replayed from the score log whenever it is shown. Movies are ordered by when they were first
+          scored, so watching a later suggestion first is what the board remembers. Editing a score updates that movie
+          in place and replays everything after it. It does not move the movie to the end.
+        </p>
+        <p>
+          The first scored movie has nothing to play, so it changes no one. It starts defending the next one. Your
+          rating can move on a movie you didn&apos;t suggest, because your last pick was challenged.
         </p>
         <p>
           Defaults from the library: each match can move at most 32 points, a two-point gap in the blended score is a
@@ -52,11 +57,11 @@ export default function HowPage() {
         <h2 className="font-heading text-2xl">Accounts</h2>
         <p>
           Join with the invite code, or ask an admin to make the account. Passwords are hashed. The name on the board
-          is the name the ranking stores, and it does not change, because old weeks remember it.
+          is the name the ranking stores, and it does not change, because old movies remember it.
         </p>
         <p>
-          An admin can reopen only the latest locked week, and only when no other movie is open. Withdrawing an open
-          pick throws away scores that were never ranked.
+          The person who suggested a movie, or an admin, can remove it while it still has no scores. Once someone has
+          scored it, the movie stays in the log. Change the numbers instead of deleting them.
         </p>
       </section>
 

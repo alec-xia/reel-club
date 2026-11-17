@@ -13,7 +13,7 @@ export default async function LeaderboardPage() {
   const user = await getCurrentUser()
   if (!user) redirect("/login")
   const names = memberNames()
-  const { league, error } = loadLeague(false)
+  const { league, error } = loadLeague()
   const start = league?.params.start ?? 1500
 
   return (
@@ -23,7 +23,8 @@ export default async function LeaderboardPage() {
         <h1 className="mt-1 font-heading text-4xl tracking-tight">Who&apos;s picking well</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           {start.toFixed(0)} stays the middle of the club. Points move from one member to another, so a great pick is
-          also someone else&apos;s movie losing a match. Your latest film keeps defending until you pick again.
+          also someone else&apos;s movie losing a match. Your latest scored film keeps defending until you suggest
+          again and that new one is scored.
         </p>
       </div>
 
@@ -35,15 +36,15 @@ export default async function LeaderboardPage() {
 
       {league && league.history.length === 0 ? (
         <p className="rounded-xl bg-accent px-4 py-3 text-sm leading-relaxed">
-          Nobody has locked a movie yet, so everyone is still at {start.toFixed(0)}. The first locked pick only takes
+          Nobody has scored a movie yet, so everyone is still at {start.toFixed(0)}. The first scored pick only takes
           the field. Ranks move once a later movie is compared with it.
         </p>
       ) : null}
 
       {league && league.history.length > 0 && league.history.every((week) => week.matches.length === 0) ? (
         <p className="rounded-xl bg-accent px-4 py-3 text-sm leading-relaxed">
-          The movies locked so far had nothing earlier to play against, so the board hasn&apos;t moved. The next lock
-          is the first real match.
+          The movies scored so far had nothing earlier to play against, so the board hasn&apos;t moved. The next scored
+          movie is the first real match.
         </p>
       ) : null}
 
@@ -86,7 +87,7 @@ export default async function LeaderboardPage() {
 
       {league && league.history.length > 0 ? (
         <section className="space-y-3">
-          <h2 className="font-heading text-2xl">How the weeks moved</h2>
+          <h2 className="font-heading text-2xl">How the picks moved</h2>
           <ul className="space-y-2">
             {[...league.history].reverse().map((week) => (
               <li key={week.week_id}>

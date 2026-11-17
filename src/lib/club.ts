@@ -1,24 +1,21 @@
 import { listUsers, findUserById, type PublicUser } from "@/lib/auth"
 import { getDb } from "@/lib/db"
 import { ClubError } from "@/lib/errors"
-import {
-  computeLeague,
-  RankingError,
-  type LeagueView,
-  type RatingInput,
-  type WeekInput,
-} from "@/lib/ranking"
+import { computeLeague, RankingError, type LeagueView, type RatingInput, type WeekInput } from "@/lib/ranking"
 
-export type WeekRecord = {
+export type MovieRecord = {
   id: number
-  weekId: string
   movie: string
   suggesterId: number
   suggesterName: string
-  status: "open" | "closed"
   suggestedAt: string
-  closedAt: string | null
   note: string | null
+  // When this movie entered the ranking. Null until the first score.
+  // Set once, so later edits do not reshuffle replay order.
+  rankedAt: string | null
+  ratingCount: number
+  avgExperience: number | null
+  avgQuality: number | null
 }
 
 export type RatingView = {
@@ -26,77 +23,90 @@ export type RatingView = {
   name: string
   experience: number
   quality: number
+  createdAt: string
   updatedAt: string
 }
 
-type WeekRow = {
+type MovieRow = {
   id: number
-  week_id: string
   movie: string
   suggester_id: number
   suggester_name: string
-  status: "open" | "closed"
   suggested_at: string
-  closed_at: string | null
   note: string | null
+  ranked_at: string | null
+  rating_count: number
+  avg_experience: number | null
+  avg_quality: number | null
 }
 
-const WEEK_SELECT = `
-  SELECT weeks.id, weeks.week_id, weeks.movie, weeks.suggester_id, weeks.status,
-         weeks.suggested_at, weeks.closed_at, weeks.note, users.name AS suggester_name
-  FROM weeks
-  JOIN users ON users.id = weeks.suggester_id
+const MOVIE_SELECT = `
+  SELECT movies.id, movies.movie, movies.suggester_id, movies.suggested_at, movies.note,
+         movies.ranked_at, users.name AS suggester_name,
+         (SELECT COUNT(*) FROM ratings WHERE ratings.movie_id = movies.id) AS rating_count,
+         (SELECT AVG(experience) FROM ratings WHERE ratings.movie_id = movies.id) AS avg_experience,
+         (SELECT AVG(quality) FROM ratings WHERE ratings.movie_id = movies.id) AS avg_quality
+  FROM movies
+  JOIN users ON users.id = movies.suggester_id
 `
 
-function mapWeek(row: WeekRow): WeekRecord {
+function mapMovie(row: MovieRow): MovieRecord {
   return {
     id: row.id,
-    weekId: row.week_id,
     movie: row.movie,
     suggesterId: row.suggester_id,
     suggesterName: row.suggester_name,
-    status: row.status,
     suggestedAt: row.suggested_at,
-    closedAt: row.closed_at,
     note: row.note,
+    rankedAt: row.ranked_at,
+    ratingCount: Number(row.rating_count),
+    avgExperience: row.avg_experience == null ? null : Number(row.avg_experience),
+    avgQuality: row.avg_quality == null ? null : Number(row.avg_quality),
   }
 }
 
-export function listWeeks(): WeekRecord[] {
+export function listMovies(): MovieRecord[] {
   const rows = getDb()
-    .prepare(`${WEEK_SELECT} ORDER BY weeks.id DESC`)
-    .all() as WeekRow[]
-  return rows.map(mapWeek)
+    .prepare(`${MOVIE_SELECT} ORDER BY movies.suggested_at DESC, movies.id DESC`)
+    .all() as MovieRow[]
+  return rows.map(mapMovie)
 }
 
-export function getOpenWeek(): WeekRecord | null {
-  const row = getDb()
-    .prepare(`${WEEK_SELECT} WHERE weeks.status = 'open' ORDER BY weeks.id DESC LIMIT 1`)
-    .get() as WeekRow | undefined
-  return row ? mapWeek(row) : null
+export function unwatchedMovies(): MovieRecord[] {
+  return listMovies().filter((movie) => movie.ratingCount === 0)
 }
 
-export function getWeekByPublicId(weekId: string): WeekRecord | null {
-  const row = getDb()
-    .prepare(`${WEEK_SELECT} WHERE weeks.week_id = ?`)
-    .get(weekId) as WeekRow | undefined
-  return row ? mapWeek(row) : null
+export function ratedMovies(): MovieRecord[] {
+  return listMovies()
+    .filter((movie) => movie.ratingCount > 0)
+    .sort((a, b) => {
+      const byTime = (b.rankedAt ?? "").localeCompare(a.rankedAt ?? "")
+      if (byTime !== 0) return byTime
+      return b.id - a.id
+    })
 }
 
-export function getRatings(weekRowId: number): RatingView[] {
+export function getMovie(id: number): MovieRecord | null {
+  const row = getDb().prepare(`${MOVIE_SELECT} WHERE movies.id = ?`).get(id) as MovieRow | undefined
+  return row ? mapMovie(row) : null
+}
+
+export function getRatings(movieId: number): RatingView[] {
   const rows = getDb()
     .prepare(
-      `SELECT ratings.user_id, users.name, ratings.experience, ratings.quality, ratings.updated_at
+      `SELECT ratings.user_id, users.name, ratings.experience, ratings.quality,
+              ratings.created_at, ratings.updated_at
        FROM ratings
        JOIN users ON users.id = ratings.user_id
-       WHERE ratings.week_row_id = ?
+       WHERE ratings.movie_id = ?
        ORDER BY users.name COLLATE NOCASE`,
     )
-    .all(weekRowId) as {
+    .all(movieId) as {
     user_id: number
     name: string
     experience: number
     quality: number
+    created_at: string
     updated_at: string
   }[]
   return rows.map((row) => ({
@@ -104,6 +114,7 @@ export function getRatings(weekRowId: number): RatingView[] {
     name: row.name,
     experience: row.experience,
     quality: row.quality,
+    createdAt: row.created_at,
     updatedAt: row.updated_at,
   }))
 }
@@ -117,6 +128,14 @@ function requireUser(userId: number): PublicUser {
     name: row.name,
     isAdmin: row.is_admin === 1,
   }
+}
+
+function requireMovieId(raw: unknown): number {
+  const movieId = typeof raw === "number" ? raw : Number(String(raw ?? "").trim())
+  if (!Number.isInteger(movieId) || movieId < 1) {
+    throw new ClubError("That movie isn't on the list.", "no_movie")
+  }
+  return movieId
 }
 
 function cleanMovie(raw: string): string {
@@ -137,6 +156,14 @@ function cleanNote(raw: string | null | undefined): string | null {
   return note
 }
 
+function cleanTimestamp(raw: string | undefined, fallback: string): string {
+  const value = raw ?? fallback
+  if (Number.isNaN(Date.parse(value))) {
+    throw new ClubError("That date is not valid.", "bad_date")
+  }
+  return value
+}
+
 export function parseScore(raw: unknown, label: string): number {
   const value = typeof raw === "number" ? raw : Number(String(raw ?? "").trim())
   if (!Number.isFinite(value)) {
@@ -144,23 +171,9 @@ export function parseScore(raw: unknown, label: string): number {
   }
   const doubled = Math.round(value * 2)
   if (Math.abs(value * 2 - doubled) > 1e-6 || doubled < 2 || doubled > 20) {
-    throw new ClubError(
-      `${label} scores run from 1 to 10, in half-point steps.`,
-      "bad_rating",
-    )
+    throw new ClubError(`${label} scores run from 1 to 10, in half-point steps.`, "bad_rating")
   }
   return doubled / 2
-}
-
-function nextWeekId(day: string): string {
-  const db = getDb()
-  let candidate = day
-  let suffix = 2
-  while (db.prepare("SELECT 1 FROM weeks WHERE week_id = ?").get(candidate)) {
-    candidate = `${day}-${suffix}`
-    suffix += 1
-  }
-  return candidate
 }
 
 export function suggestMovie(
@@ -168,204 +181,142 @@ export function suggestMovie(
   movieRaw: string,
   noteRaw: string | null,
   opts?: { suggestedAt?: string },
-): WeekRecord {
+): MovieRecord {
   const user = requireUser(userId)
   const movie = cleanMovie(movieRaw)
   const note = cleanNote(noteRaw)
-  const suggestedAt = opts?.suggestedAt ?? new Date().toISOString()
-  if (Number.isNaN(Date.parse(suggestedAt))) {
-    throw new ClubError("That suggestion date is not valid.", "bad_date")
-  }
-  const day = suggestedAt.slice(0, 10)
-  const db = getDb()
-  const insert = db.transaction(() => {
-    const open = db.prepare("SELECT id FROM weeks WHERE status = 'open' LIMIT 1").get()
-    if (open) {
-      throw new ClubError(
-        "There's already a movie open for scores. Lock it before suggesting the next one.",
-        "week_open",
-      )
-    }
-    const info = db
-      .prepare(
-        `INSERT INTO weeks (week_id, movie, suggester_id, status, suggested_at, note)
-         VALUES (?, ?, ?, 'open', ?, ?)`,
-      )
-      .run(nextWeekId(day), movie, user.id, suggestedAt, note)
-    return Number(info.lastInsertRowid)
-  })
-  const id = insert()
-  const week = listWeeks().find((item) => item.id === id)
-  if (!week) throw new ClubError("The suggestion didn't save.", "suggest_failed")
-  return week
+  const suggestedAt = cleanTimestamp(opts?.suggestedAt, new Date().toISOString())
+  const info = getDb()
+    .prepare(
+      `INSERT INTO movies (movie, suggester_id, suggested_at, note)
+       VALUES (?, ?, ?, ?)`,
+    )
+    .run(movie, user.id, suggestedAt, note)
+  const saved = getMovie(Number(info.lastInsertRowid))
+  if (!saved) throw new ClubError("The suggestion didn't save.", "suggest_failed")
+  return saved
 }
 
-export function submitRating(userId: number, experienceRaw: unknown, qualityRaw: unknown): void {
+export function submitRating(
+  userId: number,
+  movieIdRaw: unknown,
+  experienceRaw: unknown,
+  qualityRaw: unknown,
+  opts?: { at?: string },
+): void {
   const user = requireUser(userId)
-  const experience = parseScore(experienceRaw, "enjoyment")
-  const quality = parseScore(qualityRaw, "quality")
-  const week = getOpenWeek()
-  if (!week) throw new ClubError("There's no movie open for scores right now.", "no_week")
-  if (week.suggesterId === user.id) {
+  const movieId = requireMovieId(movieIdRaw)
+  const movie = getMovie(movieId)
+  if (!movie) throw new ClubError("That movie isn't on the list.", "no_movie")
+  if (movie.suggesterId === user.id) {
     throw new ClubError(
       "Pickers don't score their own movie. The ranking system rejects it, so your taste is never used to defend your own pick.",
       "suggester_rating",
     )
   }
-  const now = new Date().toISOString()
-  getDb()
-    .prepare(
-      `INSERT INTO ratings (week_row_id, user_id, experience, quality, updated_at)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(week_row_id, user_id) DO UPDATE SET
+  const experience = parseScore(experienceRaw, "enjoyment")
+  const quality = parseScore(qualityRaw, "quality")
+  const at = cleanTimestamp(opts?.at, new Date().toISOString())
+  const db = getDb()
+  const save = db.transaction(() => {
+    db.prepare(
+      `INSERT INTO ratings (movie_id, user_id, experience, quality, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(movie_id, user_id) DO UPDATE SET
          experience = excluded.experience,
          quality = excluded.quality,
          updated_at = excluded.updated_at`,
-    )
-    .run(week.id, user.id, experience, quality, now)
+    ).run(movie.id, user.id, experience, quality, at, at)
+    // First score time only. Edits change updated_at and leave ranked_at alone,
+    // including movies migrated from a locked week (their ranked_at is the lock time).
+    db.prepare(
+      `UPDATE movies
+       SET ranked_at = (SELECT MIN(created_at) FROM ratings WHERE movie_id = movies.id)
+       WHERE id = ? AND ranked_at IS NULL`,
+    ).run(movie.id)
+  })
+  save()
 }
 
-export function withdrawOpenWeek(userId: number): void {
+export function removeSuggestion(userId: number, movieIdRaw: unknown): void {
   const user = requireUser(userId)
+  const movieId = requireMovieId(movieIdRaw)
   const db = getDb()
   const remove = db.transaction(() => {
-    const week = getOpenWeek()
-    if (!week) throw new ClubError("There's no open pick to withdraw.", "no_week")
-    if (week.suggesterId !== user.id && !user.isAdmin) {
-      throw new ClubError("Only the picker or an admin can withdraw this movie.", "forbidden")
+    const movie = getMovie(movieId)
+    if (!movie) throw new ClubError("That suggestion is already gone.", "no_movie")
+    if (movie.suggesterId !== user.id && !user.isAdmin) {
+      throw new ClubError("Only the person who suggested this, or an admin, can remove it.", "forbidden")
     }
-    db.prepare("DELETE FROM weeks WHERE id = ? AND status = 'open'").run(week.id)
+    if (movie.ratingCount > 0) {
+      throw new ClubError("This movie already has scores, so it stays in the ranking.", "has_ratings")
+    }
+    const info = db
+      .prepare("DELETE FROM movies WHERE id = ? AND NOT EXISTS (SELECT 1 FROM ratings WHERE movie_id = ?)")
+      .run(movie.id, movie.id)
+    if (info.changes !== 1) {
+      throw new ClubError("This movie already has scores, so it stays in the ranking.", "has_ratings")
+    }
   })
   remove()
 }
 
 function ratingsToInput(ratings: RatingView[]): Record<string, RatingInput> {
   return Object.fromEntries(
-    ratings.map((rating) => [
-      rating.name,
-      { experience: rating.experience, quality: rating.quality },
-    ]),
+    ratings.map((rating) => [rating.name, { experience: rating.experience, quality: rating.quality }]),
   )
 }
 
-export function weekToInput(week: WeekRecord, ratings: RatingView[]): WeekInput {
+function replayStamp(movie: MovieRecord, ratings: RatingView[]): string {
+  if (movie.rankedAt) return movie.rankedAt
+  const created = ratings.map((rating) => rating.createdAt).sort()
+  return created[0] ?? movie.suggestedAt
+}
+
+function movieToInput(movie: MovieRecord, ratings: RatingView[]): WeekInput {
+  const rankedAt = replayStamp(movie, ratings)
   return {
-    week_id: week.weekId,
-    suggester: week.suggesterName,
-    movie: week.movie,
-    date: week.suggestedAt.slice(0, 10),
+    week_id: String(movie.id),
+    suggester: movie.suggesterName,
+    movie: movie.movie,
+    date: rankedAt.slice(0, 10),
+    ranked_at: rankedAt,
     ratings: ratingsToInput(ratings),
   }
 }
 
-export function closedWeekInputs(): WeekInput[] {
-  const weeks = listWeeks()
-    .filter((week) => week.status === "closed")
-    .sort((a, b) => a.id - b.id)
-  return weeks.map((week) => weekToInput(week, getRatings(week.id)))
+// Scored movies only, oldest first-score (or migrated lock time) first.
+// movie_elo replays the array in order and does not look at week numbers.
+export function rankedMovieInputs(): WeekInput[] {
+  return listMovies()
+    .filter((movie) => movie.ratingCount > 0)
+    .map((movie) => {
+      const ratings = getRatings(movie.id)
+      return { id: movie.id, input: movieToInput(movie, ratings) }
+    })
+    .sort((a, b) => {
+      const byTime = (a.input.ranked_at ?? "").localeCompare(b.input.ranked_at ?? "")
+      if (byTime !== 0) return byTime
+      return a.id - b.id
+    })
+    .map((item) => item.input)
 }
 
 export function memberNames(): string[] {
   return listUsers().map((user) => user.name)
 }
 
-export function loadLeague(preview = false): {
-  league: LeagueView | null
-  error: string | null
-} {
+export function loadLeague(): { league: LeagueView | null; error: string | null } {
   const members = memberNames()
   if (members.length === 0) return { league: null, error: null }
-  const open = preview ? getOpenWeek() : null
-  const previewInput =
-    open && getRatings(open.id).length > 0 ? weekToInput(open, getRatings(open.id)) : null
   try {
     return {
-      league: computeLeague({
-        members,
-        weeks: closedWeekInputs(),
-        preview: previewInput,
-      }),
+      league: computeLeague({ members, weeks: rankedMovieInputs() }),
       error: null,
     }
   } catch (error) {
     const message =
-      error instanceof RankingError || error instanceof Error
-        ? error.message
-        : "The ranking engine failed."
+      error instanceof RankingError || error instanceof Error ? error.message : "The ranking engine failed."
     return { league: null, error: message }
   }
-}
-
-export function closeWeek(userId: number, opts?: { closedAt?: string }): WeekRecord {
-  const user = requireUser(userId)
-  const week = getOpenWeek()
-  if (!week) throw new ClubError("There's no open movie to lock.", "no_week")
-  if (week.suggesterId !== user.id && !user.isAdmin) {
-    throw new ClubError("The picker, or an admin, locks the week.", "forbidden")
-  }
-  const ratings = getRatings(week.id)
-  if (ratings.length === 0) {
-    throw new ClubError("At least one score is needed before the week can lock.", "no_ratings")
-  }
-  const members = memberNames()
-  try {
-    const preview = computeLeague({
-      members,
-      weeks: closedWeekInputs(),
-      preview: weekToInput(week, ratings),
-    })
-    if (preview.preview_error || !preview.preview) {
-      throw new ClubError(
-        preview.preview_error?.error ?? "The ranking engine did not return a result for this week.",
-        "ranking",
-      )
-    }
-  } catch (error) {
-    if (error instanceof ClubError) throw error
-    const message = error instanceof Error ? error.message : "The ranking engine rejected this week."
-    throw new ClubError(message, "ranking")
-  }
-
-  const closedAt = opts?.closedAt ?? new Date().toISOString()
-  const db = getDb()
-  const lock = db.transaction(() => {
-    const current = db
-      .prepare("SELECT status FROM weeks WHERE id = ?")
-      .get(week.id) as { status: string } | undefined
-    if (!current || current.status !== "open") {
-      throw new ClubError("This week is already locked.", "closed")
-    }
-    db.prepare("UPDATE weeks SET status = 'closed', closed_at = ? WHERE id = ?").run(closedAt, week.id)
-  })
-  lock()
-  const locked = getWeekByPublicId(week.weekId)
-  if (!locked) throw new ClubError("The locked week could not be reloaded.", "close_failed")
-  return locked
-}
-
-export function reopenLatest(userId: number): WeekRecord {
-  const user = requireUser(userId)
-  if (!user.isAdmin) throw new ClubError("Only an admin can reopen a locked week.", "forbidden")
-  const db = getDb()
-  const reopen = db.transaction(() => {
-    if (db.prepare("SELECT id FROM weeks WHERE status = 'open' LIMIT 1").get()) {
-      throw new ClubError("Lock or withdraw the open movie before reopening an older one.", "week_open")
-    }
-    const latest = db
-      .prepare("SELECT id, status FROM weeks ORDER BY id DESC LIMIT 1")
-      .get() as { id: number; status: string } | undefined
-    if (!latest || latest.status !== "closed") {
-      throw new ClubError("The most recent movie is not a locked week.", "no_week")
-    }
-    db.prepare("UPDATE weeks SET status = 'open', closed_at = NULL WHERE id = ?").run(latest.id)
-    return latest.id
-  })
-  const id = reopen()
-  const week = listWeeks().find((item) => item.id === id)
-  if (!week) throw new ClubError("That week could not be reopened.", "reopen_failed")
-  return week
-}
-
-export function eligibleRaters(members: PublicUser[], week: WeekRecord): PublicUser[] {
-  return members.filter((member) => member.id !== week.suggesterId)
 }

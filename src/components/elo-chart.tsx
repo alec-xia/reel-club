@@ -38,7 +38,7 @@ export function EloChart({
 
   return (
     <figure className="space-y-3">
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full" role="img" aria-label="Elo over locked weeks">
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full" role="img" aria-label="Elo over scored movies">
         {ticks.map((tick) => (
           <g key={tick}>
             <line x1={pad.left} x2={width - pad.right} y1={y(tick)} y2={y(tick)} stroke="currentColor" strokeOpacity="0.12" />
