@@ -51,7 +51,15 @@ CREATE TABLE IF NOT EXISTS ratings (
 `
 
 export function dbPath(): string {
-  return process.env.CLUB_DB_PATH ?? path.join(process.cwd(), "data", "club.db")
+  const explicit = process.env.CLUB_DB_PATH?.trim()
+  if (explicit) return explicit
+  const configuredDir = process.env.DATA_DIR?.trim()
+  const dir =
+    configuredDir ||
+    (process.env.NODE_ENV === "production" && process.env.NEXT_PHASE !== "phase-production-build"
+      ? "/data"
+      : path.join(process.cwd(), "data"))
+  return path.join(dir, "club.db")
 }
 
 export function getDb(): Database.Database {

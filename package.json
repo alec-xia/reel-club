@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 43123",
     "build": "next build",
-    "start": "next start -H 0.0.0.0 -p 43123",
+    "start": "next start -H 0.0.0.0 -p ${PORT:-43123}",
     "lint": "eslint",
     "test": "node --import tsx --experimental-test-isolation=process --test --test-concurrency=1 tests/*.test.ts && PYTHONPATH=vendor python3 -m unittest discover -s tests -p 'test_*.py' && PYTHONPATH=vendor python3 -m unittest discover -s vendor/upstream_tests",
     "seed": "tsx scripts/seed.ts"

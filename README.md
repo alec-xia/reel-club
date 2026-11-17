@@ -52,10 +52,10 @@ You need Node.js 20+ and Python 3.9+ (`python3` on `PATH`).
 ```bash
 npm install
 npm test
-npm run dev
+SEED_DEMO=1 npm run dev
 ```
 
-The dev server listens on [http://127.0.0.1:43123](http://127.0.0.1:43123). An empty database in development is filled with a demo club:
+The dev server listens on [http://127.0.0.1:43123](http://127.0.0.1:43123). `SEED_DEMO=1` fills an empty database with a demo club. Without it, the database stays empty and the first person who joins with the invite code becomes the admin.
 
 | Username | Name | Password | Role |
 | --- | --- | --- | --- |
@@ -65,9 +65,9 @@ The dev server listens on [http://127.0.0.1:43123](http://127.0.0.1:43123). An e
 | noor | Noor | `reel-night` | Member |
 | sam | Sam | `reel-night` | Member |
 
-The development invite code is `come-watch`. Set `SEED_DEMO=0` to start from an empty club. `npm run seed` fills an empty database the same way the dev server does.
+The development invite code is `come-watch`. `npm run seed` fills an empty database the same way `SEED_DEMO=1` does.
 
-Passwords are hashed with bcrypt. Session tokens are random, stored only as SHA-256 hashes, and sent in an httpOnly cookie. No secret is committed. SQLite lives at `data/club.db` (gitignored).
+Passwords are hashed with bcrypt. Session tokens are random. The database stores only an HMAC-SHA256 of each token, keyed with `SESSION_SECRET` (or a generated file next to the database in development). The cookie is httpOnly. No secret is committed. SQLite lives at `data/club.db` unless `DATA_DIR` or `CLUB_DB_PATH` is set.
 
 ## Environment
 
@@ -75,13 +75,18 @@ See `.env.example`.
 
 | Variable | Purpose |
 | --- | --- |
-| `INVITE_CODE` | Code friends enter on the join page. Required in production. Development default: `come-watch`. |
-| `SEED_DEMO` | `0` skips the demo. `1` loads it into an empty database, including in production. |
-| `CLUB_DB_PATH` | SQLite file. Default `data/club.db`. |
+| `INVITE_CODE` | Code friends type to join. Required in production. Development default: `come-watch`. |
+| `SESSION_SECRET` | At least 16 characters. Required in production. Signs session tokens. |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Optional. On startup, creates this admin if that username does not exist yet. Does not reset the password later. |
+| `ADMIN_NAME` | Board name for that admin. Defaults to `ADMIN_USERNAME`. |
+| `SEED_DEMO` | `1` loads the demo club into an empty database. Anything else, including unset, does not. |
+| `DATA_DIR` | Directory for `club.db`. Production default is `/data`. |
+| `CLUB_DB_PATH` | Full path to the sqlite file. Overrides `DATA_DIR`. |
+| `PORT` | HTTP port. Defaults to 43123 outside Railway. |
 | `PYTHON` | Python executable. Default `python3`. |
 | `BCRYPT_ROUNDS` | Cost factor, default 12. |
 
-In production, leave `SEED_DEMO` unset so a fresh server does not create the known demo password. Create the first accounts by setting `SEED_DEMO=1` once on a private machine, adding the real members, and then replacing that database — or keep one admin and have them create everyone else from **Members**. This build does not include a password-change screen. Hand new members the password you typed, and ask them to treat it as temporary among friends.
+The first admin is created in one of two ways. Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` (and optionally `ADMIN_NAME`) before the first boot; that account is inserted once and later restarts leave the password alone. If those variables are unset and the database has no users, the first successful invite-code signup becomes the admin. Further signups are ordinary members. This build does not include a password-change screen.
 
 ## Tests
 
@@ -94,30 +99,44 @@ npm test
 - `tests/ranking.test.ts` and `tests/test_bridge.py` check the adapter against `movie_elo.replay` directly.
 - `vendor/upstream_tests` is the library's own suite, including the README worked example.
 
-## Deploying for the group
+## Deploying on Railway
 
-Any host that can run Node and Python 3, with a persistent disk for `data/`, is enough. There is no external database.
+The image is the `Dockerfile`. `railway.toml` selects the Dockerfile builder and sets the healthcheck to `/healthz`. Railway injects `PORT`; the server listens on `0.0.0.0:$PORT`.
+
+Create a volume and mount it at `/data`. The database file is `/data/club.db`. The image sets `DATA_DIR=/data`. Do not leave the volume off, or every deploy starts from an empty club.
+
+Service variables:
+
+| Variable | Required | Example |
+| --- | --- | --- |
+| `INVITE_CODE` | yes | a long private phrase |
+| `SESSION_SECRET` | yes | `openssl rand -base64 32` |
+| `ADMIN_USERNAME` | recommended | `mira` |
+| `ADMIN_PASSWORD` | recommended | 16+ random characters |
+| `ADMIN_NAME` | no | `Mira` |
+| `SEED_DEMO` | no | leave unset |
+
+Do not set `SEED_DEMO` on the shared club. That loads the public demo password `reel-night`.
+
+`/healthz` returns 200 when the config is present and SQLite answers. It returns 503 when `INVITE_CODE` or `SESSION_SECRET` is missing, so a deploy without those variables stays unhealthy instead of opening the club.
+
+The session cookie is `Secure` in production, so the Railway domain needs HTTPS, which Railway provides.
+
+A laptop Docker run uses the same image:
 
 ```bash
 docker build -t reel-club .
 docker run --rm -p 43123:43123 \
   -e INVITE_CODE='a-long-private-code' \
-  -e SEED_DEMO=0 \
-  -v reel-data:/app/data \
+  -e SESSION_SECRET="$(openssl rand -base64 32)" \
+  -e ADMIN_USERNAME='mira' \
+  -e ADMIN_PASSWORD='choose-a-real-password' \
+  -e ADMIN_NAME='Mira' \
+  -v reel-data:/data \
   reel-club
 ```
 
-Then open port 43123 only to the friends, or put Caddy or nginx in front for HTTPS. The session cookie is `Secure` when `NODE_ENV=production`, so browsers will only keep the login on HTTPS.
-
-On a VPS without Docker:
-
-```bash
-npm ci
-npm run build
-INVITE_CODE='a-long-private-code' SEED_DEMO=0 npm start
-```
-
-Keep `data/` across restarts. Back it up; it is the whole club.
+Without `PORT`, the container listens on 43123.
 
 ## Notes on the library
 

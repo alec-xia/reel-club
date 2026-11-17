@@ -1,5 +1,6 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
+import { randomBytes, timingSafeEqual } from "node:crypto"
 import bcrypt from "bcryptjs"
+import { hashSessionToken } from "@/lib/config"
 import { getDb } from "@/lib/db"
 import { AuthError } from "@/lib/errors"
 
@@ -162,14 +163,32 @@ export function registerMember(input: {
   if (!inviteMatches(input.inviteCode.trim(), expected)) {
     throw new AuthError("That invite code isn't right.", "bad_invite")
   }
-  return toPublic(
-    insertUser({
+  const db = getDb()
+  const create = db.transaction(() => {
+    const count = (db.prepare("SELECT COUNT(*) AS c FROM users").get() as { c: number }).c
+    return insertUser({
       username: input.username,
       name: input.name,
       password: input.password,
-      isAdmin: false,
-    }),
-  )
+      isAdmin: count === 0,
+    })
+  })
+  return toPublic(create.immediate())
+}
+
+export function ensureBootstrapAdmin(): void {
+  const usernameRaw = process.env.ADMIN_USERNAME?.trim() ?? ""
+  const password = process.env.ADMIN_PASSWORD ?? ""
+  const nameRaw = process.env.ADMIN_NAME?.trim() ?? ""
+  if (!usernameRaw && !password && !nameRaw) return
+  if (!usernameRaw || !password) {
+    throw new Error("Set both ADMIN_USERNAME and ADMIN_PASSWORD, or neither.")
+  }
+  const username = validateUsername(usernameRaw)
+  if (findUserByUsername(username)) return
+  const name = validateName(nameRaw || username)
+  validatePassword(password)
+  insertUser({ username, name, password, isAdmin: true })
 }
 
 export function createMember(input: {
@@ -201,7 +220,7 @@ export function authenticate(username: string, password: string): PublicUser {
 }
 
 function hashToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex")
+  return hashSessionToken(token)
 }
 
 export function createSession(userId: number): string {

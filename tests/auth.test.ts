@@ -50,7 +50,14 @@ describe("auth", { concurrency: 1 }, () => {
       inviteCode: "test-invite",
     })
     assert.equal(user.username, "mira")
-    assert.equal(user.isAdmin, false)
+    assert.equal(user.isAdmin, true)
+    const later = registerMember({
+      username: "noor",
+      name: "Noor",
+      password: "correct-horse",
+      inviteCode: "test-invite",
+    })
+    assert.equal(later.isAdmin, false)
     assert.throws(
       () =>
         registerMember({
