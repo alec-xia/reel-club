@@ -33,7 +33,7 @@ export function MemberForm() {
       </div>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" name="isAdmin" className="size-4 accent-primary" />
-        Admin, can add members and reopen the latest week
+        Admin, can add members and remove unscored suggestions
       </label>
       {state?.error ? (
         <p role="alert" className="text-sm text-destructive">

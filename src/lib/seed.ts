@@ -1,12 +1,7 @@
 import { hashPassword } from "@/lib/auth"
-import {
-  closeWeek,
-  getOpenWeek,
-  submitRating,
-  suggestMovie,
-} from "@/lib/club"
-import { getDb } from "@/lib/db"
 import { findUserByUsername } from "@/lib/auth"
+import { getRatings, listMovies, submitRating, suggestMovie } from "@/lib/club"
+import { getDb } from "@/lib/db"
 
 export const DEMO_PASSWORD = "reel-night"
 
@@ -20,13 +15,12 @@ const PEOPLE = [
 
 type ScoreMap = Record<string, [number, number]>
 
-const WEEKS: {
+const MOVIES: {
   suggester: string
   movie: string
   note: string
   at: string
   ratings: ScoreMap
-  close: boolean
 }[] = [
   {
     suggester: "mira",
@@ -34,7 +28,6 @@ const WEEKS: {
     note: "Wes at his most pastry-shop. Mira has wanted this on the list since the club started.",
     at: "2026-10-02T18:00:00.000Z",
     ratings: { jules: [8, 8], theo: [7, 8], noor: [9, 9], sam: [6, 7] },
-    close: true,
   },
   {
     suggester: "jules",
@@ -42,7 +35,6 @@ const WEEKS: {
     note: "Jules has been campaigning for this since 2019 and refused to summarize the plot.",
     at: "2026-10-09T18:00:00.000Z",
     ratings: { mira: [9, 10], theo: [8, 9], noor: [9, 9], sam: [8, 8] },
-    close: true,
   },
   {
     suggester: "theo",
@@ -50,7 +42,6 @@ const WEEKS: {
     note: "Talky, on purpose. Theo said to treat the walking as the plot.",
     at: "2026-10-16T18:00:00.000Z",
     ratings: { mira: [8, 6], jules: [7, 6], noor: [9, 7], sam: [5, 5] },
-    close: true,
   },
   {
     suggester: "noor",
@@ -58,7 +49,6 @@ const WEEKS: {
     note: "Noor's comfort pick, defended in the group chat as canon rather than nostalgia.",
     at: "2026-10-23T18:00:00.000Z",
     ratings: { mira: [9, 9], jules: [8, 9], theo: [10, 9], sam: [8, 8] },
-    close: true,
   },
   {
     suggester: "sam",
@@ -66,7 +56,6 @@ const WEEKS: {
     note: "Sam promised it was fun and not homework. There was popcorn. There were arguments.",
     at: "2026-10-30T18:00:00.000Z",
     ratings: { mira: [7, 6], jules: [8, 6], theo: [6, 5], noor: [7, 6] },
-    close: true,
   },
   {
     suggester: "mira",
@@ -74,15 +63,20 @@ const WEEKS: {
     note: "Mira says this is a perfect film and is willing to be ranked on it.",
     at: "2026-11-06T18:00:00.000Z",
     ratings: { jules: [9, 8], theo: [8, 8], noor: [9, 8], sam: [8, 7] },
-    close: true,
   },
   {
     suggester: "jules",
     movie: "Portrait of a Lady on Fire",
-    note: "Jules again, two weeks later. Bring tissues, apparently. Scores are still open.",
+    note: "Jules again. Bring tissues, apparently. Not everyone has scored it yet.",
     at: "2026-11-13T18:00:00.000Z",
     ratings: { theo: [9, 9], noor: [8, 9] },
-    close: false,
+  },
+  {
+    suggester: "sam",
+    movie: "In the Mood for Love",
+    note: "Sam put this on the list for whenever the group can sit still for it.",
+    at: "2026-11-20T18:00:00.000Z",
+    ratings: {},
   },
 ]
 
@@ -111,13 +105,13 @@ export function seedDemo(): void {
   })
   addMembers()
 
-  for (const week of WEEKS) {
-    suggestMovie(userId(week.suggester), week.movie, week.note, { suggestedAt: week.at })
-    for (const [username, scores] of Object.entries(week.ratings)) {
-      submitRating(userId(username), scores[0], scores[1])
-    }
-    if (week.close) {
-      closeWeek(userId(week.suggester), { closedAt: week.at.slice(0, 10) + "T23:30:00.000Z" })
+  for (const entry of MOVIES) {
+    const movie = suggestMovie(userId(entry.suggester), entry.movie, entry.note, { suggestedAt: entry.at })
+    let index = 0
+    for (const [username, scores] of Object.entries(entry.ratings)) {
+      const at = `${entry.at.slice(0, 10)}T${String(20 + index).padStart(2, "0")}:15:00.000Z`
+      submitRating(userId(username), movie.id, scores[0], scores[1], { at })
+      index += 1
     }
   }
 }
@@ -130,5 +124,9 @@ export function seedDemoIfEmpty(): boolean {
 }
 
 export function demoClubIsSeeded(): boolean {
-  return findUserByUsername("mira") !== null && getOpenWeek()?.movie === "Portrait of a Lady on Fire"
+  return (
+    findUserByUsername("mira") !== null &&
+    listMovies().some((movie) => movie.movie === "Portrait of a Lady on Fire" && movie.ratingCount > 0) &&
+    getRatings(listMovies().find((movie) => movie.movie === "In the Mood for Love")?.id ?? 0).length === 0
+  )
 }

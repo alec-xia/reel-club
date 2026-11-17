@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Stdin/stdout adapter around the vendored movie_elo package.
 
-Reel Club stores members and the raw weekly ratings. This process replays that
-log with movie_elo.replay and returns standings plus each WeekResult. An
-optional ``preview`` week is scored with League.preview_week and is not
-applied. Nothing in this file implements rating math.
+Reel Club stores members and one rating pair per member per movie. This
+process replays that log with movie_elo.replay and returns standings plus
+each WeekResult. Replay order is the order of ``weeks`` unless a week carries
+``ranked_at``, in which case events are ordered by that timestamp (then by
+numeric week id) so a movie scored out of suggestion order still ranks in
+watch order. An optional ``preview`` week is scored with League.preview_week
+and is not applied. Nothing in this file implements rating math.
 """
 
 from __future__ import annotations
@@ -31,6 +34,32 @@ def with_report(result) -> dict:
     return data
 
 
+def _tie(week_id: str) -> tuple:
+    if week_id.isdigit():
+        return (0, int(week_id))
+    return (1, week_id)
+
+
+def replay_order(raw_weeks: list) -> list:
+    """Order scored movies by ranked_at when the caller provides it.
+
+    Without ranked_at, the given order is the replay order. Week ids are not
+    a sort key: they used to be calendar weeks, and a later suggestion can be
+    watched first.
+    """
+    weeks = list(raw_weeks or [])
+    if not any(isinstance(week, dict) and week.get("ranked_at") for week in weeks):
+        return weeks
+
+    def key(week: object) -> tuple:
+        if not isinstance(week, dict):
+            return ("", 1, "")
+        stamp = str(week.get("ranked_at") or "")
+        return (stamp, *_tie(str(week.get("week_id") or "")))
+
+    return sorted(weeks, key=key)
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
@@ -41,7 +70,7 @@ def main() -> int:
         raw_params = payload.get("params")
         params = Params.from_dict(raw_params) if raw_params else Params()
         members = [str(name) for name in payload.get("members", [])]
-        weeks = [Week.from_dict(week) for week in payload.get("weeks", [])]
+        weeks = [Week.from_dict(week) for week in replay_order(payload.get("weeks", []))]
         league = replay(members, weeks, params)
 
         preview = None

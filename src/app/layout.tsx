@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     default: "Reel Club",
     template: "%s · Reel Club",
   },
-  description: "A private weekly movie club: one pick, two scores, and an Elo board for the people who choose.",
+  description: "A private movie club: suggest whenever, score what you watched, and an Elo board for the people who choose.",
   robots: { index: false, follow: false },
 }
 

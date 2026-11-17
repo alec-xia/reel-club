@@ -5,9 +5,8 @@ import { usePathname } from "next/navigation"
 import { cn } from "cn"
 
 const LINKS = [
-  { href: "/", label: "Now" },
+  { href: "/movies", label: "Movies" },
   { href: "/leaderboard", label: "Board" },
-  { href: "/movies", label: "Films" },
   { href: "/how", label: "How" },
 ]
 
@@ -24,9 +23,9 @@ export function MainNav({
   if (variant === "bottom") {
     return (
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur md:hidden">
-        <ul className="mx-auto grid max-w-lg grid-cols-4 pb-[env(safe-area-inset-bottom)]">
+        <ul className="mx-auto grid max-w-lg grid-cols-3 pb-[env(safe-area-inset-bottom)]">
           {LINKS.map((link) => {
-            const active = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href)
+            const active = pathname === link.href || pathname.startsWith(`${link.href}/`)
             return (
               <li key={link.href}>
                 <Link
@@ -50,7 +49,7 @@ export function MainNav({
   return (
     <nav className="ml-auto hidden items-center gap-1 md:flex">
       {links.map((link) => {
-        const active = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href)
+        const active = pathname === link.href || pathname.startsWith(`${link.href}/`)
         return (
           <Link
             key={link.href}
