@@ -23,12 +23,15 @@ function Landing() {
           one, and score it whenever you actually watch it. Those numbers feed an Elo that ranks the members, not the
           films.
         </p>
-        <div className="flex flex-wrap gap-3 pt-2">
+        <div className="flex flex-wrap items-center gap-3 pt-2">
           <Link href="/login" className={cn(buttonVariants(), "h-11 px-4 text-base")}>
             Log in
           </Link>
           <Link href="/join" className={cn(buttonVariants({ variant: "outline" }), "h-11 bg-card px-4 text-base")}>
             Join with an invite
+          </Link>
+          <Link href="/how" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+            How the ranking works
           </Link>
         </div>
       </section>
