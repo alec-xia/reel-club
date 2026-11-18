@@ -24,7 +24,10 @@ export default async function LeaderboardPage() {
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           {start.toFixed(0)} stays the middle of the club. Points move from one member to another, so a great pick is
           also someone else&apos;s movie losing a match. Your latest scored film keeps defending until you suggest
-          again and that new one is scored.
+          again and that new one is scored.{" "}
+          <Link href="/how" className="text-primary underline-offset-4 hover:underline">
+            How this works
+          </Link>
         </p>
       </div>
 

@@ -41,6 +41,9 @@ export function Shell({
               </>
             ) : (
               <>
+                <Link href="/how" className="text-sm font-medium underline-offset-4 hover:underline">
+                  How
+                </Link>
                 <Link href="/login" className={cn(buttonVariants({ variant: "secondary" }), "h-9 bg-primary-foreground px-3 text-primary")}>
                   Log in
                 </Link>

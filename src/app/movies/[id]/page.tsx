@@ -105,7 +105,12 @@ export default async function MoviePage({
 
       {result ? (
         <section className="space-y-3">
-          <h2 className="font-heading text-2xl">What the ranking did</h2>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="font-heading text-2xl">What the ranking did</h2>
+            <Link href="/how" className="text-sm text-primary underline-offset-4 hover:underline">
+              How this works
+            </Link>
+          </div>
           {result.matches.length === 0 && Object.keys(result.skipped).length === 0 ? (
             <p className="text-sm leading-relaxed text-muted-foreground">
               No earlier scored movie was on the board, so this one changed nothing. {movie.suggesterName}&apos;s pick
@@ -161,7 +166,11 @@ export default async function MoviePage({
         </section>
       ) : movie.ratingCount === 0 ? (
         <p className="text-sm text-muted-foreground">
-          This stays off the board until someone scores it. Scoring it later still counts, in the order it was watched.
+          This stays off the board until someone scores it. Scoring it later still counts, in the order it was first
+          scored.{" "}
+          <Link href="/how" className="text-primary underline-offset-4 hover:underline">
+            How this works
+          </Link>
         </p>
       ) : null}
 

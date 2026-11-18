@@ -25,7 +25,10 @@ export async function MovieBoard({ user, notice }: { user: PublicUser; notice?: 
         <h1 className="mt-1 font-heading text-4xl tracking-tight">Movies</h1>
         <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
           Suggest a movie whenever you want. Rate any of them after you watch it, in whatever order the group gets to
-          them.
+          them.{" "}
+          <Link href="/how" className="text-primary underline-offset-4 hover:underline">
+            How the scores move the board
+          </Link>
         </p>
       </div>
 
