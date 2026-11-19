@@ -106,13 +106,16 @@ function requireMovie(raw: unknown): BeliMovie {
 }
 
 // Same normalisation movie_beli applies (strip), plus collapsed inner spaces so
-// the NOCASE UNIQUE index and the library's exact-title key agree.
+// the NOCASE UNIQUE index and the library's exact-title key agree. U+0085 (NEL)
+// is rejected with the other control characters: Python's str.strip() removes it
+// and JS trim() does not, so a title keeping it would not round-trip through the
+// engine. It is the only code point the two whitespace sets disagree on.
 function cleanTitle(raw: string): string {
   const title = raw.trim().replace(/\s+/g, " ")
   if (title.length < 1 || title.length > 200) {
     throw new BeliError("Give the movie a title, up to 200 characters.", "bad_title")
   }
-  if (/[\x00-\x1f\x7f]/.test(title)) {
+  if (/[\x00-\x1f\x7f-\x9f]/.test(title)) {
     throw new BeliError("Titles can't contain control characters.", "bad_title")
   }
   return title
@@ -170,6 +173,7 @@ function loadState(): { state: BeliState; idByTitle: Map<string, number> } {
   for (const row of rows) {
     const name = nameById.get(row.user_id)
     const title = titleById.get(row.movie_id)
+    // Both lookups always hit: foreign keys are on and beli_movies cascades.
     if (name && title) lists[name][row.bucket].push(title)
   }
   return {

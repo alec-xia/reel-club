@@ -121,6 +121,14 @@ class BeliBridgeTests(unittest.TestCase):
         self.assertFalse(unknown["ok"])
         self.assertIn("unknown command", unknown["error"])
         self.assertEqual(run_bridge([])["type"], "ValidationError")
+        self.assertEqual(run_bridge("not an object")["type"], "ValidationError")
+        self.assertEqual(run_bridge({"command": "view", "state": "nope", "member": "Ada"})["type"], "ValidationError")
+        self.assertEqual(run_bridge({"command": "view", "state": state(), "member": 7})["type"], "ValidationError")
+        broken = subprocess.run(
+            [sys.executable, str(BRIDGE)], input="{not json", text=True, capture_output=True, check=False, cwd=ROOT
+        )
+        self.assertEqual(broken.returncode, 0)
+        self.assertEqual(json.loads(broken.stdout)["type"], "JSONDecodeError")
 
 
 if __name__ == "__main__":

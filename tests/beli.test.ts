@@ -71,6 +71,14 @@ describe("beli rankings", { concurrency: 1 }, () => {
     assert.throws(() => submitBeliMovie(idOf("cyo"), "heat"), /already on the Beli list/)
     assert.throws(() => submitBeliMovie(idOf("cyo"), ""), /up to 200 characters/)
     assert.throws(() => submitBeliMovie(idOf("cyo"), "bad\u0007title"), /control characters/)
+    // U+0085 is whitespace to Python's strip() but not to JS trim(); a title
+    // keeping it would never round-trip through the engine and would break
+    // every /beli page for everyone. It is refused like the other C1 controls.
+    assert.throws(() => submitBeliMovie(idOf("cyo"), "\u0085Alien"), /control characters/)
+    assert.throws(() => submitBeliMovie(idOf("cyo"), "Al\u0085ien"), /control characters/)
+    assert.throws(() => submitBeliMovie(idOf("cyo"), "\u0085Heat"), /control characters/)
+    assert.equal(getBeliView(idOf("bea")).movies.length, 4)
+    assert.equal(getBeliView(idOf("cyo")).movies.map((movie) => movie.title).includes("Alien"), true)
 
     // Own submission is refused before and inside the engine.
     assert.throws(() => startBeliRanking(idOf("ada"), heat.id, "liked"), /don't rank it/)

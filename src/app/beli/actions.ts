@@ -36,9 +36,16 @@ export async function beliSubmitAction(_prev: ActionState, formData: FormData): 
 }
 
 // The rank page is plain forms: errors travel back in the query string, like
-// removeSuggestionAction does for /movies.
-function backToRank(movieId: string, error: unknown): never {
-  redirect(`/beli/rank/${movieId}?error=${encodeURIComponent(message(error))}`)
+// removeSuggestionAction does for /movies. The form's movieId is encoded so a
+// crafted value cannot add its own query string.
+function rankPath(movieId: string, error?: unknown): string {
+  const base = `/beli/rank/${encodeURIComponent(movieId)}`
+  return error === undefined ? base : `${base}?error=${encodeURIComponent(message(error))}`
+}
+
+function moviePath(movieId: string, error?: unknown): string {
+  const base = `/beli/movies/${encodeURIComponent(movieId)}`
+  return error === undefined ? base : `${base}?error=${encodeURIComponent(message(error))}`
 }
 
 export async function beliStartAction(formData: FormData): Promise<void> {
@@ -49,10 +56,10 @@ export async function beliStartAction(formData: FormData): Promise<void> {
   try {
     done = startBeliRanking(user.id, movieId, formData.get("bucket")).done
   } catch (error) {
-    backToRank(movieId, error)
+    redirect(rankPath(movieId, error))
   }
   refresh()
-  redirect(done ? `/beli/movies/${movieId}` : `/beli/rank/${movieId}`)
+  redirect(done ? moviePath(movieId) : rankPath(movieId))
 }
 
 export async function beliAnswerAction(formData: FormData): Promise<void> {
@@ -63,10 +70,10 @@ export async function beliAnswerAction(formData: FormData): Promise<void> {
   try {
     done = answerBeliRanking(user.id, movieId, formData.get("answer")).done
   } catch (error) {
-    backToRank(movieId, error)
+    redirect(rankPath(movieId, error))
   }
   refresh()
-  redirect(done ? `/beli/movies/${movieId}` : `/beli/rank/${movieId}`)
+  redirect(done ? moviePath(movieId) : rankPath(movieId))
 }
 
 export async function beliCancelAction(formData: FormData): Promise<void> {
@@ -74,7 +81,7 @@ export async function beliCancelAction(formData: FormData): Promise<void> {
   if (!user) redirect("/login")
   cancelBeliRanking(user.id)
   refresh()
-  redirect(`/beli/rank/${String(formData.get("movieId") ?? "")}`)
+  redirect(rankPath(String(formData.get("movieId") ?? "")))
 }
 
 export async function beliRemoveAction(formData: FormData): Promise<void> {
@@ -84,8 +91,8 @@ export async function beliRemoveAction(formData: FormData): Promise<void> {
   try {
     removeBeliRanking(user.id, movieId)
   } catch (error) {
-    redirect(`/beli/movies/${movieId}?error=${encodeURIComponent(message(error))}`)
+    redirect(moviePath(movieId, error))
   }
   refresh()
-  redirect(`/beli/movies/${movieId}`)
+  redirect(moviePath(movieId))
 }
